@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>筋肉痛の視覚化（部位・左右別）</title>
+<style>
+  html,body { margin:0; padding:0; height:100%; background:#0b0d10; color:#e6e9ef; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans JP",sans-serif }
+  #app { position:fixed; inset:0; display:grid; grid-template-rows:1fr auto }
+  #stage { position:relative; background:#0b0d10; touch-action:none }
+  canvas { display:block; width:100%; height:100% }
+  #hud { display:flex; gap:.5rem; align-items:center; padding:.5rem .75rem; background:#0f1217; border-top:1px solid #1b222c; flex-wrap:wrap }
+  .btn { appearance:none; border:1px solid #263043; background:#131821; color:#e6e9ef; padding:.5rem .7rem; border-radius:.6rem; font-size:.9rem; line-height:1 }
+  .btn:active { transform:scale(.98) }
+  .btn.primary { background:#1a2a4a; border-color:#2e4d8a }
+  .seg { display:flex; border:1px solid #263043; border-radius:.6rem; overflow:hidden }
+  .seg button { border:0; background:#0f1217; padding:.45rem .6rem; color:#b7c0cd }
+  .seg button.active { background:#1a2a4a; color:#fff }
+  #lang { margin-left:auto }
+  #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:5.5rem; padding:.6rem .8rem; background:#111723; border:1px solid #24314a; border-radius:.6rem; display:none; z-index:10 }
+  #calendarPanel { position:fixed; inset:auto 0 0 0; background:#0f1217; border-top:1px solid #1b222c; transform: translateY(100%); transition: transform .25s ease; z-index:9 }
+  #calendarPanel.open { transform: translateY(0) }
+  #calHeader { display:flex; align-items:center; justify-content:space-between; padding:.6rem .75rem; border-bottom:1px solid #1b222c }
+  #calGrid { display:grid; grid-template-columns:repeat(7,1fr); gap:.25rem; padding:.5rem }
+  .calCell { aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; border:1px solid #1b222c; border-radius:.4rem; font-size:.9rem; color:#b7c0cd }
+  .calCell.today { outline:2px solid #2e7dd7 }
+  .calCell.hasData { background:#132235; color:#e6f0ff }
+  #help { position:fixed; top:.5rem; left:.5rem; right:.5rem; display:flex; justify-content:space-between; pointer-events:none }
+  .pill { pointer-events:auto; background:rgba(16,20,28,.6); backdrop-filter:blur(6px); padding:.35rem .55rem; border:1px solid rgba(60,80,110,.5); border-radius:999px; font-size:.8rem; color:#c8d1de }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage"></div>
+  <div id="hud">
+    <div class="seg" id="viewSeg">
+      <button data-view="front" class="active">前面</button>
+      <button data-view="back">背面</button>
+    </div>
+    <button class="btn" id="undoBtn">UNDO</button>
+    <button class="btn" id="redoBtn">REDO</button>
+    <div class="seg">
+      <button class="btn" id="bothBtn">左右同時</button>
+      <button class="btn" id="mirrorBtn">反対側に反映</button>
+    </div>
+    <button class="btn" id="calendarBtn">カレンダー</button>
+    <button class="btn" id="shotBtn">PNG</button>
+    <div class="seg">
+      <button class="btn" id="exportBtn">JSON出力</button>
+      <button class="btn" id="importBtn">JSON取込</button>
+    </div>
+    <div class="seg" id="lang">
+      <button data-lang="ja" class="active">日本語</button>
+      <button data-lang="en">EN</button>
+    </div>
+  </div>
+</div>
+
+<div id="help">
+  <div class="pill">タップ＝強度切替（弱→中→強→オフ）</div>
+  <div class="pill">2指：ドラッグ=パン／ピンチ=ズーム</div>
+</div>
+<div id="toast"></div>
+
+<div id="calendarPanel">
+  <div id="calHeader">
+    <button class="btn" id="calPrev">◀</button>
+    <div>
+      <div id="calTitle" style="text-align:center;font-weight:600"></div>
+      <div style="text-align:center; font-size:.85rem; color:#9aa6b2">タップでその日の状態を復元</div>
+    </div>
+    <button class="btn" id="calNext">▶</button>
+  </div>
+  <div id="calGrid"></div>
+</div>
+
+<!-- Three.js (CDN) -->
+<script src="https://unpkg.com/three@0.160.1/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.160.1/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+/* ===== L10N ===== */
+const L10N = {
+  ja: { regions: {
+      head:"頭部", neck:"頸", chest:"胸部", upperBack:"背上部", lowerBack:"背下部", abdomen:"腹部",
+      shoulderL:"左肩", shoulderR:"右肩", upperArmF_L:"左上腕前", upperArmF_R:"右上腕前",
+      upperArmB_L:"左上腕後", upperArmB_R:"右上腕後", forearmF_L:"左前腕前", forearmF_R:"右前腕前",
+      forearmB_L:"左前腕後", forearmB_R:"右前腕後", handL:"左手", handR:"右手",
+      gluteL:"左殿部", gluteR:"右殿部",
+      thighF_L:"左大腿前", thighF_R:"右大腿前", thighB_L:"左大腿後", thighB_R:"右大腿後",
+      thighM_L:"左大腿内側", thighM_R:"右大腿内側", thighL_L:"左大腿外側", thighL_R:"右大腿外側",
+      calfF_L:"左下腿前", calfF_R:"右下腿前", calfB_L:"左下腿後", calfB_R:"右下腿後",
+      itb_L:"左腸脛靭帯域", itb_R:"右腸脛靭帯域", achilles_L:"左アキレス腱域", achilles_R:"右アキレス腱域",
+      footSole_L:"左足底", footSole_R:"右足底", footDorsum_L:"左足背", footDorsum_R:"右足背",
+      hipRing_L:"左股関節周囲", hipRing_R:"右股関節周囲", kneeRing_L:"左膝周囲", kneeRing_R:"右膝周囲",
+    }, toastSaved:"保存しました", toastLoaded:"読み込みました", front:"前面", back:"背面" },
+  en: { regions: {
+      head:"Head", neck:"Neck", chest:"Chest", upperBack:"Upper back", lowerBack:"Lower back", abdomen:"Abdomen",
+      shoulderL:"L Shoulder", shoulderR:"R Shoulder", upperArmF_L:"L Upper arm (ant)", upperArmF_R:"R Upper arm (ant)",
+      upperArmB_L:"L Upper arm (post)", upperArmB_R:"R Upper arm (post)", forearmF_L:"L Forearm (ant)", forearmF_R:"R Forearm (ant)",
+      forearmB_L:"L Forearm (post)", forearmB_R:"R Forearm (post)", handL:"L Hand", handR:"R Hand",
+      gluteL:"L Glute", gluteR:"R Glute",
+      thighF_L:"L Thigh (ant)", thighF_R:"R Thigh (ant)", thighB_L:"L Thigh (post)", thighB_R:"R Thigh (post)",
+      thighM_L:"L Thigh (med)", thighM_R:"R Thigh (med)", thighL_L:"L Thigh (lat)", thighL_R:"R Thigh (lat)",
+      calfF_L:"L Lower leg (ant)", calfF_R:"R Lower leg (ant)", calfB_L:"L Lower leg (post)", calfB_R:"R Lower leg (post)",
+      itb_L:"L ITB zone", itb_R:"R ITB zone", achilles_L:"L Achilles", achilles_R:"R Achilles",
+      footSole_L:"L Sole", footSole_R:"R Sole", footDorsum_L:"L Dorsum", footDorsum_R:"R Dorsum",
+      hipRing_L:"L Hip ring", hipRing_R:"R Hip ring", kneeRing_L:"L Knee ring", kneeRing_R:"R Knee ring",
+    }, toastSaved:"Saved", toastLoaded:"Loaded", front:"Front", back:"Back" }
+};
+let LANG = 'ja';
+const $ = s=>document.querySelector(s);
+const toast = m=>{ const t=$("#toast"); t.textContent=m; t.style.display="block"; setTimeout(()=>t.style.display="none",1200); };
+const ymd = d=> d.toISOString().slice(0,10);
+
+/* ===== Stripe map ===== */
+const stripeCache = {};
+function makeStripeTexture(baseColor, opacity=0.18, period=12){
+  const key = baseColor+':'+opacity+':'+period;
+  if (stripeCache[key]) return stripeCache[key];
+  const size = 128;
+  const c = document.createElement('canvas'); c.width = size; c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = baseColor; ctx.fillRect(0,0,size,size);
+  ctx.globalAlpha = opacity; ctx.fillStyle = '#ffffff';
+  for(let i=-size;i<size*2;i+=period){
+    ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i+size*0.5,0); ctx.lineTo(i,size); ctx.lineTo(i-size*0.5,size); ctx.closePath(); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1,1);
+  return (stripeCache[key]=tex);
+}
+
+/* ===== Three.js ===== */
+const stage = $("#stage");
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(stage.clientWidth, stage.clientHeight);
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(45, stage.clientWidth/stage.clientHeight, 0.1, 100);
+camera.position.set(0, 1.6, 4.2);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = .08; controls.target.set(0,1.3,0);
+controls.minDistance = 2.2; controls.maxDistance = 8; controls.enablePan = true;
+
+scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x111318, 0.9));
+const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(2,3,2); scene.add(dir);
+
+/* 半透明スキン（ローポリ外形） */
+const skinMat = new THREE.MeshPhysicalMaterial({ color:0xfff3e6, roughness:0.9, metalness:0.0, transmission:0.6, thickness:0.4, transparent:true, opacity:0.6 });
+const capsule=(r,h)=> new THREE.CapsuleGeometry(r,h,8,16);
+const box=(x,y,z)=> new THREE.BoxGeometry(x,y,z);
+const skin = new THREE.Group(); scene.add(skin);
+const bodyOuter = new THREE.Group(); skin.add(bodyOuter);
+const head = new THREE.Mesh(capsule(0.11,0.22), skinMat); head.position.set(0,1.75,0); bodyOuter.add(head);
+const chest = new THREE.Mesh(capsule(0.28,0.45), skinMat); chest.position.set(0,1.35,0); bodyOuter.add(chest);
+const abdomen = new THREE.Mesh(capsule(0.24,0.32), skinMat); abdomen.position.set(0,1.02,0); bodyOuter.add(abdomen);
+const pelvis = new THREE.Mesh(capsule(0.28,0.25), skinMat); pelvis.position.set(0,0.78,0); bodyOuter.add(pelvis);
+function limb(side){ const s=side==='L'?-1:1; const g=new THREE.Group(); skin.add(g);
+  const ua=new THREE.Mesh(capsule(0.09,0.32), skinMat); ua.position.set(0.35*s,1.35,0); ua.rotation.z=-Math.PI*0.25*s; g.add(ua);
+  const fa=new THREE.Mesh(capsule(0.075,0.30), skinMat); fa.position.set(0.6*s,1.05,0); fa.rotation.z=-Math.PI*0.3*s; g.add(fa);
+  const hand=new THREE.Mesh(box(0.12,0.18,0.04), skinMat); hand.position.set(0.8*s,0.86,0); hand.rotation.z=-Math.PI*0.3*s; g.add(hand);
+}
+limb('L'); limb('R');
+function leg(side){ const s=side==='L'?-1:1;
+  const th=new THREE.Mesh(capsule(0.12,0.42), skinMat); th.position.set(0.14*s,0.55,0); th.rotation.x=0.02; skin.add(th);
+  const sh=new THREE.Mesh(capsule(0.095,0.40), skinMat); sh.position.set(0.14*s,0.15,0); skin.add(sh);
+  const ft=new THREE.Mesh(box(0.12,0.05,0.24), skinMat); ft.position.set(0.14*s, -0.07, 0.085); skin.add(ft);
+}
+leg('L'); leg('R');
+
+/* ===== 部位メッシュ（左右別） ===== */
+const regionDefs = [
+  {id:"head", geom:capsule(0.105,0.2), pos:[0,1.75,0]},
+  {id:"neck", geom:capsule(0.10,0.10), pos:[0,1.58,0]},
+  {id:"chest", geom:capsule(0.26,0.42), pos:[0,1.34,0]},
+  {id:"upperBack", geom:capsule(0.26,0.42), pos:[0,1.34,-0.02]},
+  {id:"abdomen", geom:capsule(0.22,0.28), pos:[0,1.03,0]},
+  {id:"lowerBack", geom:capsule(0.22,0.28), pos:[0,1.03,-0.02]},
+  {id:"shoulderL", geom:capsule(0.11,0.12), pos:[-0.33,1.42,0]},
+  {id:"shoulderR", geom:capsule(0.11,0.12), pos:[0.33,1.42,0]},
+  {id:"upperArmF_L", geom:capsule(0.085,0.28), pos:[-0.48,1.23,0.04], rot:[0,0, -Math.PI*0.25]},
+  {id:"upperArmF_R", geom:capsule(0.085,0.28), pos:[0.48,1.23,0.04], rot:[0,0, Math.PI*0.25]},
+  {id:"upperArmB_L", geom:capsule(0.085,0.28), pos:[-0.48,1.23,-0.04], rot:[0,0,-Math.PI*0.25]},
+  {id:"upperArmB_R", geom:capsule(0.085,0.28), pos:[0.48,1.23,-0.04], rot:[0,0, Math.PI*0.25]},
+  {id:"forearmF_L", geom:capsule(0.07,0.26), pos:[-0.66,1.0,0.02], rot:[0,0,-Math.PI*0.3]},
+  {id:"forearmF_R", geom:capsule(0.07,0.26), pos:[0.66,1.0,0.02], rot:[0,0, Math.PI*0.3]},
+  {id:"forearmB_L", geom:capsule(0.07,0.26), pos:[-0.66,1.0,-0.02], rot:[0,0,-Math.PI*0.3]},
+  {id:"forearmB_R", geom:capsule(0.07,0.26), pos:[0.66,1.0,-0.02], rot:[0,0, Math.PI*0.3]},
+  {id:"handL", geom:box(0.10,0.16,0.05), pos:[-0.83,0.86,0]},
+  {id:"handR", geom:box(0.10,0.16,0.05), pos:[0.83,0.86,0]},
+  {id:"gluteL", geom:capsule(0.13,0.18), pos:[-0.15,0.82,-0.02]},
+  {id:"gluteR", geom:capsule(0.13,0.18), pos:[0.15,0.82,-0.02]},
+  {id:"thighF_L", geom:capsule(0.11,0.38), pos:[-0.14,0.52,0.05]},
+  {id:"thighF_R", geom:capsule(0.11,0.38), pos:[0.14,0.52,0.05]},
+  {id:"thighB_L", geom:capsule(0.11,0.38), pos:[-0.14,0.52,-0.05]},
+  {id:"thighB_R", geom:capsule(0.11,0.38), pos:[0.14,0.52,-0.05]},
+  {id:"thighM_L", geom:capsule(0.09,0.36), pos:[-0.07,0.52,0]},
+  {id:"thighM_R", geom:capsule(0.09,0.36), pos:[0.07,0.52,0]},
+  {id:"thighL_L", geom:capsule(0.09,0.36), pos:[-0.21,0.52,0]},
+  {id:"thighL_R", geom:capsule(0.09,0.36), pos:[0.21,0.52,0]},
+  {id:"calfF_L", geom:capsule(0.085,0.35), pos:[-0.14,0.14,0.04]},
+  {id:"calfF_R", geom:capsule(0.085,0.35), pos:[0.14,0.14,0.04]},
+  {id:"calfB_L", geom:capsule(0.085,0.35), pos:[-0.14,0.14,-0.04]},
+  {id:"calfB_R", geom:capsule(0.085,0.35), pos:[0.14,0.14,-0.04]},
+  {id:"itb_L", geom:capsule(0.06,0.38), pos:[-0.24,0.52,0]},
+  {id:"itb_R", geom:capsule(0.06,0.38), pos:[0.24,0.52,0]},
+  {id:"achilles_L", geom:capsule(0.04,0.18), pos:[-0.14,0.0,-0.03]},
+  {id:"achilles_R", geom:capsule(0.04,0.18), pos:[0.14,0.0,-0.03]},
+  {id:"footSole_L", geom:box(0.11,0.04,0.22), pos:[-0.14,-0.07,0.085]},
+  {id:"footSole_R", geom:box(0.11,0.04,0.22), pos:[0.14,-0.07,0.085]},
+  {id:"footDorsum_L", geom:box(0.11,0.04,0.22), pos:[-0.14,-0.07,0.085], rot:[Math.PI,0,0]},
+  {id:"footDorsum_R", geom:box(0.11,0.04,0.22), pos:[0.14,-0.07,0.085], rot:[Math.PI,0,0]},
+  {id:"hipRing_L", geom:capsule(0.12,0.10), pos:[-0.14,0.74,0]},
+  {id:"hipRing_R", geom:capsule(0.12,0.10), pos:[0.14,0.74,0]},
+  {id:"kneeRing_L", geom:capsule(0.10,0.10), pos:[-0.14,0.30,0.02]},
+  {id:"kneeRing_R", geom:capsule(0.10,0.10), pos:[0.14,0.30,0.02]},
+];
+const pickingGroup = new THREE.Group(); scene.add(pickingGroup);
+
+/* 色設定 */
+const COLORS = { none:0x5f738a, weak:'#F2C94C', mid:'#F2994A', strong:'#EB5757' };
+function makeMat(level){
+  if (level===0) return new THREE.MeshStandardMaterial({ color:COLORS.none, roughness:.9, transparent:true, opacity:.18 });
+  if (level===1) return new THREE.MeshStandardMaterial({ color:COLORS.weak, roughness:.8, transparent:true, opacity:.6 });
+  if (level===2){ const tex = makeStripeTexture(COLORS.mid, 0.16, 14);
+    return new THREE.MeshStandardMaterial({ color:COLORS.mid, roughness:.7, transparent:true, opacity:.75, map:tex });
+  }
+  const tex = makeStripeTexture(COLORS.strong, 0.22, 10);
+  return new THREE.MeshStandardMaterial({ color:COLORS.strong, roughness:.6, transparent:true, opacity:.85, map:tex });
+}
+
+/* メッシュ生成 */
+const regions = {};
+for(const def of regionDefs){
+  const mesh = new THREE.Mesh(def.geom, makeMat(0));
+  mesh.position.fromArray(def.pos);
+  if (def.rot){ mesh.rotation.set(def.rot[0]||0, def.rot[1]||0, def.rot[2]||0); }
+  mesh.userData.id = def.id; mesh.userData.level = 0;
+  pickingGroup.add(mesh); regions[def.id] = mesh;
+}
+
+/* 入力＆選択 */
+const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
+let applyBothSides=false, mirrorApply=false;
+function regionPair(id){
+  if (/_L$/.test(id)) return id.replace(/_L$/,'_R');
+  if (/_R$/.test(id)) return id.replace(/_R$/,'_L');
+  if (/L$/.test(id)) return id.replace(/L$/,'R');
+  if (/R$/.test(id)) return id.replace(/R$/,'L');
+  return null;
+}
+function setLevel(id, level){ const m=regions[id]; if(!m) return; m.userData.level=level; m.material.dispose(); m.material=makeMat(level); }
+function cycleLevel(id){
+  const cur = regions[id].userData.level||0, next = (cur+1)%4; setLevel(id,next);
+  if (applyBothSides){ const p=regionPair(id); if (p) setLevel(p,next); }
+  if (mirrorApply){ const p=regionPair(id); if (p) setLevel(p, regions[id].userData.level); }
+  pushHistory();
+}
+function onTap(x,y){
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((x - r.left) / r.width) * 2 - 1;
+  pointer.y = -((y - r.top) / r.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(pickingGroup.children, false);
+  if (hits.length){
+    const id = hits[0].object.userData.id; cycleLevel(id);
+    const name = L10N[LANG].regions[id] || id; toast(name);
+  }
+}
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if (e.isPrimary && e.pointerType!=='mouse'){
+    if (e.width<=20 && e.height<=20) onTap(e.clientX, e.clientY);
+  }
+});
+renderer.domElement.addEventListener('dblclick', e=> onTap(e.clientX, e.clientY));
+
+/* ビュー切替 */
+function setView(mode){
+  const seg = $("#viewSeg");
+  seg.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.view===mode));
+  if (mode==='front'){ controls.target.set(0,1.3,0); camera.position.set(0,1.6,4.2); }
+  else { controls.target.set(0,1.3,0); camera.position.set(0,1.6,-4.2); }
+  controls.update();
+}
+$("#viewSeg").addEventListener('click', e=>{
+  if (e.target.tagName==='BUTTON') setView(e.target.dataset.view);
+});
+$("#bothBtn").onclick = ()=>{ applyBothSides=!applyBothSides; $("#bothBtn").classList.toggle('primary', applyBothSides); };
+$("#mirrorBtn").onclick = ()=>{ mirrorApply=!mirrorApply; $("#mirrorBtn").classList.toggle('primary', mirrorApply); };
+
+/* 履歴・保存 */
+const STORAGE_KEY = 'muscle-map-daily';
+const historyStack = []; let historyPtr = -1;
+function snapshot(){ const s={}; for(const id in regions) s[id]=regions[id].userData.level||0; return s; }
+function applyState(s){ for(const id in s) if (regions[id]!=null) setLevel(id, s[id]); }
+function pushHistory(){ const s=snapshot(); historyStack.splice(historyPtr+1); historyStack.push(s); historyPtr=historyStack.length-1; saveToday(); }
+function undo(){ if (historyPtr>0){ historyPtr--; applyState(historyStack[historyPtr]); saveToday(); } }
+function redo(){ if (historyPtr<historyStack.length-1){ historyPtr++; applyState(historyStack[historyPtr]); saveToday(); } }
+$("#undoBtn").onclick=undo; $("#redoBtn").onclick=redo;
+
+function loadAll(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw?JSON.parse(raw):{}; }catch{ return {}; } }
+function saveAll(obj){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); }catch(e){ toast('保存に失敗'); } }
+function saveToday(dateStr=ymd(new Date())){ const all=loadAll(); all[dateStr]=snapshot(); saveAll(all); updateCalendarBadges(); }
+function loadDate(dateStr){ const all=loadAll(); if(all[dateStr]){ applyState(all[dateStr]); pushHistory(); toast(L10N[LANG].toastLoaded); } }
+
+/* カレンダー */
+const calPanel=$("#calendarPanel"), calGrid=$("#calGrid"); let calCurrent=new Date();
+$("#calendarBtn").onclick=()=> calPanel.classList.toggle('open');
+$("#calPrev").onclick=()=>{ calCurrent.setMonth(calCurrent.getMonth()-1); renderCalendar(); };
+$("#calNext").onclick=()=>{ calCurrent.setMonth(calCurrent.getMonth()+1); renderCalendar(); };
+function renderCalendar(){
+  const y=calCurrent.getFullYear(), m=calCurrent.getMonth();
+  $("#calTitle").textContent = `${y} / ${('0'+(m+1)).slice(-2)}`; calGrid.innerHTML='';
+  const first=new Date(y,m,1), start=(first.getDay()+6)%7, days=new Date(y,m+1,0).getDate();
+  const wd=['日','月','火','水','木','金','土'];
+  for(let i=0;i<7;i++){ const h=document.createElement('div'); h.className='calCell'; h.style.fontWeight='700'; h.textContent=wd[i]; calGrid.appendChild(h); }
+  for(let i=0;i<start;i++){ const dummy=document.createElement('div'); dummy.className='calCell'; dummy.style.opacity=.3; calGrid.appendChild(dummy); }
+  const all=loadAll(); for(let d=1; d<=days; d++){
+    const el=document.createElement('div'); el.className='calCell';
+    const dt=new Date(y,m,d), key=ymd(dt); el.textContent=d;
+    if (key===ymd(new Date())) el.classList.add('today');
+    if (all[key]) el.classList.add('hasData');
+    el.onclick=()=>{ loadDate(key); calPanel.classList.remove('open'); };
+    calGrid.appendChild(el);
+  }
+}
+function updateCalendarBadges(){ if (calPanel.classList.contains('open')) renderCalendar(); }
+
+/* 言語切替 */
+$("#lang").addEventListener('click', e=>{
+  if (e.target.tagName!=='BUTTON') return;
+  $("#lang").querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active'); LANG = e.target.dataset.lang;
+  const vs=$("#viewSeg").querySelectorAll('button'); vs[0].textContent=L10N[LANG].front; vs[1].textContent=L10N[LANG].back;
+});
+
+/* I/O */
+$("#exportBtn").onclick=()=>{
+  const data={ version:1, date: ymd(new Date()), state: snapshot() };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`musclemap_${data.date}.json`; a.click(); URL.revokeObjectURL(url);
+};
+$("#importBtn").onclick=()=>{
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json';
+  inp.onchange=()=>{ const f=inp.files[0]; if(!f) return; const fr=new FileReader();
+    fr.onload=()=>{ try{ const j=JSON.parse(fr.result); if(j&&j.state){ applyState(j.state); pushHistory(); toast(L10N[LANG].toastLoaded); } }catch{} };
+    fr.readAsText(f);
+  }; inp.click();
+};
+$("#shotBtn").onclick=()=>{
+  renderer.render(scene,camera); const url=renderer.domElement.toDataURL('image/png');
+  const a=document.createElement('a'); a.href=url; a.download=`snapshot_${ymd(new Date())}.png`; a.click();
+};
+
+/* init */
+window.addEventListener('resize', ()=>{
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
+  camera.aspect=stage.clientWidth/stage.clientHeight; camera.updateProjectionMatrix();
+});
+function init(){
+  setView('front'); renderCalendar();
+  // 初期履歴
+  historyStack.length=0; historyPtr=-1; pushHistory();
+  const today=ymd(new Date()); const all=loadAll();
+  if(all[today]){ applyState(all[today]); pushHistory(); }
+  updateCalendarBadges();
+}
+init();
+/* render loop */
+(function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>
