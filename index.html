@@ -64,12 +64,7 @@
   import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
   import { OrbitControls } from 'https://unpkg.com/three@0.160.1/examples/jsm/controls/OrbitControls.js';
 
-  // === 以下にとうごさんの元のJSコードを移植 ===
-  // 注意：
-  //  - THREE.OrbitControls(...) → new OrbitControls(...)
-  //  - モジュールとして読み込んでいるので THREE は import した変数を使用
-  //  - "three" のようなパッケージ名指定は一切使わない
-
+  // === Three.js 初期化 ===
   const stage = document.getElementById('stage');
   const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -92,7 +87,21 @@
   dl.position.set(2, 3, 2);
   scene.add(dl);
 
-  // ここから先は元コードのMesh生成やUIイベント処理をそのまま記述
+  // === モデル構築（元コードのMesh生成部分をここに移植） ===
+  // 例:
+  const material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const cube = new THREE.Mesh(geometry, material);
+  scene.add(cube);
+
+  // === レンダリングループ ===
+  function animate(){
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
 </script>
 </body>
 </html>
+
