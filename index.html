@@ -27,7 +27,7 @@
     #help{position:fixed;top:.5rem;left:.5rem;right:.5rem;display:flex;justify-content:space-between;pointer-events:none}
     .pill{pointer-events:auto;background:rgba(16,20,28,.6);backdrop-filter:blur(6px);padding:.35rem .55rem;border:1px solid rgba(60,80,110,.5);border-radius:999px;font-size:.8rem;color:#c8d1de}
 
-    /* ▼ ボタンが押せるように修正 ▼ */
+    /* ▼ ボタン押下可能化修正 ▼ */
     #hud {
       position: relative;
       z-index: 10;
@@ -39,7 +39,6 @@
     #stage canvas {
       pointer-events: auto;
     }
-    /* ▲ 追加ここまで ▲ */
   </style>
 </head>
 <body>
@@ -65,11 +64,11 @@
   import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
   import { OrbitControls } from 'https://unpkg.com/three@0.160.1/examples/jsm/controls/OrbitControls.js';
 
-  /* === 元のJavaScriptコードをここにすべて移植 ===
-     - 変更点1: THREE.OrbitControls(...) → new OrbitControls(...)
-     - 変更点2: importで読み込んだTHREEをそのまま利用
-     - 他の処理ロジックはそのまま
-  */
+  // === 以下にとうごさんの元のJSコードを移植 ===
+  // 注意：
+  //  - THREE.OrbitControls(...) → new OrbitControls(...)
+  //  - モジュールとして読み込んでいるので THREE は import した変数を使用
+  //  - "three" のようなパッケージ名指定は一切使わない
 
   const stage = document.getElementById('stage');
   const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
@@ -93,8 +92,7 @@
   dl.position.set(2, 3, 2);
   scene.add(dl);
 
-  // ここから先は、とうごさんの元のモデル構築・UI操作・イベント処理のコードをそのまま続けてください
-
+  // ここから先は元コードのMesh生成やUIイベント処理をそのまま記述
 </script>
 </body>
 </html>
