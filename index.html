@@ -9,7 +9,7 @@
     #app{position:fixed;inset:0;display:grid;grid-template-rows:1fr auto}
     #stage{position:relative;touch-action:none}
     canvas{display:block;width:100%;height:100%}
-    #hud{display:flex;gap:.5rem;align-items:center;padding:.5rem .75rem;background:#0f1217;border-top:1px solid #1b222c;flex-wrap:wrap}
+    #hud{display:flex;gap:.5rem;align-items:center;padding:.5rem .75rem;background:#0f1217;border-top:1px solid #1b222c;flex-wrap:wrap;position:relative;z-index:10;pointer-events:auto}
     .btn{appearance:none;border:1px solid #263043;background:#131821;color:#e6e9ef;padding:.5rem .7rem;border-radius:.6rem;font-size:.9rem}
     .btn.primary{background:#1a2a4a;border-color:#2e4d8a}
     .seg{display:flex;border:1px solid #263043;border-radius:.6rem;overflow:hidden}
@@ -26,19 +26,6 @@
     .calCell.hasData{background:#132235;color:#e6f0ff}
     #help{position:fixed;top:.5rem;left:.5rem;right:.5rem;display:flex;justify-content:space-between;pointer-events:none}
     .pill{pointer-events:auto;background:rgba(16,20,28,.6);backdrop-filter:blur(6px);padding:.35rem .55rem;border:1px solid rgba(60,80,110,.5);border-radius:999px;font-size:.8rem;color:#c8d1de}
-
-    /* ▼ ボタン押下可能化修正 ▼ */
-    #hud {
-      position: relative;
-      z-index: 10;
-      pointer-events: auto;
-    }
-    #stage {
-      pointer-events: none;
-    }
-    #stage canvas {
-      pointer-events: auto;
-    }
   </style>
 </head>
 <body>
@@ -55,24 +42,31 @@
 </div>
 <div id="help"><div class="pill">タップ＝強度切替（弱→中→強→オフ）</div><div class="pill">2指：ドラッグ=パン／ピンチ=ズーム</div></div>
 <div id="toast"></div>
-<div id="calendarPanel"><div id="calHeader">
-  <button class="btn" id="calPrev">◀</button><div><div id="calTitle" style="text-align:center;font-weight:600"></div>
-  <div style="text-align:center;font-size:.85rem;color:#9aa6b2">タップでその日の状態を復元</div></div><button class="btn" id="calNext">▶</button>
-</div><div id="calGrid"></div></div>
+<div id="calendarPanel">
+  <div id="calHeader">
+    <button class="btn" id="calPrev">◀</button>
+    <div>
+      <div id="calTitle" style="text-align:center;font-weight:600"></div>
+      <div style="text-align:center;font-size:.85rem;color:#9aa6b2">タップでその日の状態を復元</div>
+    </div>
+    <button class="btn" id="calNext">▶</button>
+  </div>
+  <div id="calGrid"></div>
+</div>
 
 <script type="module">
+  // 最新three.jsをES ModuleとしてCDNから読み込み
   import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
   import { OrbitControls } from 'https://unpkg.com/three@0.160.1/examples/jsm/controls/OrbitControls.js';
 
-  // === Three.js 初期化 ===
   const stage = document.getElementById('stage');
-  const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
+  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:true });
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-  renderer.setSize(stage.clientWidth,stage.clientHeight);
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
   stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, stage.clientWidth/stage.clientHeight, .1, 100);
+  const camera = new THREE.PerspectiveCamera(45, stage.clientWidth / stage.clientHeight, 0.1, 100);
   camera.position.set(0, 1.6, 4.2);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -82,25 +76,29 @@
   controls.maxDistance = 8;
   controls.enablePan = true;
 
-  scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x111318, .9));
-  const dl = new THREE.DirectionalLight(0xffffff, .9);
+  scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x111318, 0.9));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.9);
   dl.position.set(2, 3, 2);
   scene.add(dl);
 
-  // === モデル構築（元コードのMesh生成部分をここに移植） ===
-  // 例:
-  const material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+  // ダミー3Dモデル（あとで実際のモデル読み込みに置き換え）
   const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
   const cube = new THREE.Mesh(geometry, material);
   scene.add(cube);
 
-  // === レンダリングループ ===
-  function animate(){
+  function animate() {
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
   }
   animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = stage.clientWidth / stage.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(stage.clientWidth, stage.clientHeight);
+  });
 </script>
 </body>
 </html>
