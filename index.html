@@ -27,7 +27,7 @@
     #help{position:fixed;top:.5rem;left:.5rem;right:.5rem;display:flex;justify-content:space-between;pointer-events:none}
     .pill{pointer-events:auto;background:rgba(16,20,28,.6);backdrop-filter:blur(6px);padding:.35rem .55rem;border:1px solid rgba(60,80,110,.5);border-radius:999px;font-size:.8rem;color:#c8d1de}
 
-    /* ▼ 追加: ボタン押下可能化修正 ▼ */
+    /* ▼ ボタンが押せるように修正 ▼ */
     #hud {
       position: relative;
       z-index: 10;
@@ -61,38 +61,11 @@
   <div style="text-align:center;font-size:.85rem;color:#9aa6b2">タップでその日の状態を復元</div></div><button class="btn" id="calNext">▶</button>
 </div><div id="calGrid"></div></div>
 
-<!-- three.js を ESM で読み込む -->
 <script type="module">
   import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
   import { OrbitControls } from 'https://unpkg.com/three@0.160.1/examples/jsm/controls/OrbitControls.js';
 
-  /* ここから先は元のJavaScriptを貼り付け */
-  /* 注意: OrbitControls は new OrbitControls(...) で使う */
-
-  // 例: 初期化部分
-  const stage = document.getElementById('stage');
-  const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-  renderer.setSize(stage.clientWidth,stage.clientHeight);
-  stage.appendChild(renderer.domElement);
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, stage.clientWidth/stage.clientHeight, .1, 100);
-  camera.position.set(0, 1.6, 4.2);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.target.set(0, 1.3, 0);
-  controls.minDistance = 2.2;
-  controls.maxDistance = 8;
-  controls.enablePan = true;
-
-  scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x111318, .9));
-  const dl = new THREE.DirectionalLight(0xffffff, .9);
-  dl.position.set(2, 3, 2);
-  scene.add(dl);
-
-  /* --- 以降はとうごさんの元コードを順にESMに移植 --- */
+ 
 </script>
 </body>
 </html>
