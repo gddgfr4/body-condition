@@ -21,6 +21,18 @@ meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-s
   .calCell.today{outline:2px solid #2e7dd7}.calCell.hasData{background:#132235;color:#e6f0ff}
   #help{position:fixed;top:.5rem;left:.5rem;right:.5rem;display:flex;justify-content:space-between;pointer-events:none}
   .pill{pointer-events:auto;background:rgba(16,20,28,.6);backdrop-filter:blur(6px);padding:.35rem .55rem;border:1px solid rgba(60,80,110,.5);border-radius:999px;font-size:.8rem;color:#c8d1de}
+   #hud {
+    position: relative;
+    z-index: 10;       /* 前面に出す */
+    pointer-events: auto; /* タップを受け取る */
+  }
+
+  #stage {
+    pointer-events: none; /* stage全体のpointerイベントを無効化 */
+  }
+
+  #stage canvas {
+    pointer-events: auto;
 </style>
 </head><body>
 <div id="app">
